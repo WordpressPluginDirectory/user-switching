@@ -5,19 +5,19 @@
  * @package   user-switching
  * @link      https://github.com/johnbillion/user-switching
  * @author    John Blackbourn
- * @copyright 2009-2024 John Blackbourn
+ * @copyright 2009-2025 John Blackbourn
  * @license   GPL v2 or later
  *
  * Plugin Name:       User Switching
  * Description:       Instant switching between user accounts in WordPress
- * Version:           1.9.1
+ * Version:           1.11.0
  * Plugin URI:        https://wordpress.org/plugins/user-switching/
  * Author:            John Blackbourn
  * Author URI:        https://johnblackbourn.com
  * Text Domain:       user-switching
  * Domain Path:       /languages/
  * Network:           true
- * Requires at least: 5.9
+ * Requires at least: 6.0
  * Requires PHP:      7.4
  * License URI:       https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
  *
@@ -133,7 +133,7 @@ final class user_switching {
 				<?php echo esc_html_x( 'User Switching', 'User Switching title on user profile screen', 'user-switching' ); ?>
 			</th>
 			<td>
-				<a id="user_switching_switcher" href="<?php echo esc_url( $link ); ?>">
+				<a id="user_switching_switcher" class="button" href="<?php echo esc_url( $link ); ?>">
 					<?php esc_html_e( 'Switch&nbsp;To', 'user-switching' ); ?>
 				</a>
 			</td>
@@ -241,13 +241,11 @@ final class user_switching {
 						'user_switched' => 'true',
 					];
 
-					if ( $redirect_to ) {
-						wp_safe_redirect( add_query_arg( $args, $redirect_to ), 302, self::$application );
-					} elseif ( ! current_user_can( 'read' ) ) {
-						wp_safe_redirect( add_query_arg( $args, home_url() ), 302, self::$application );
-					} else {
-						wp_safe_redirect( add_query_arg( $args, admin_url() ), 302, self::$application );
+					if ( ! $redirect_to ) {
+						$redirect_to = current_user_can( 'read' ) ? admin_url() : home_url();
 					}
+
+					wp_safe_redirect( add_query_arg( $args, $redirect_to ), 302, self::$application );
 					exit;
 				} else {
 					wp_die( esc_html__( 'Could not switch users.', 'user-switching' ), 404 );
@@ -258,7 +256,7 @@ final class user_switching {
 			case 'switch_to_olduser':
 				// Fetch the originating user data:
 				$old_user = self::get_old_user();
-				if ( ! $old_user ) {
+				if ( ! ( $old_user instanceof WP_User ) ) {
 					wp_die( esc_html__( 'Could not switch users.', 'user-switching' ), 400 );
 				}
 
@@ -274,7 +272,6 @@ final class user_switching {
 
 				// Switch user:
 				if ( switch_to_user( $old_user->ID, self::remember(), false ) ) {
-
 					if ( ! empty( $_REQUEST['interim-login'] ) && function_exists( 'login_header' ) ) {
 						// phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 						$GLOBALS['interim_login'] = 'success';
@@ -288,11 +285,11 @@ final class user_switching {
 						'switched_back' => 'true',
 					];
 
-					if ( $redirect_to ) {
-						wp_safe_redirect( add_query_arg( $args, $redirect_to ), 302, self::$application );
-					} else {
-						wp_safe_redirect( add_query_arg( $args, admin_url( 'users.php' ) ), 302, self::$application );
+					if ( ! $redirect_to ) {
+						$redirect_to = admin_url( 'users.php' );
 					}
+
+					wp_safe_redirect( add_query_arg( $args, $redirect_to ), 302, self::$application );
 					exit;
 				} else {
 					wp_die( esc_html__( 'Could not switch users.', 'user-switching' ), 404 );
@@ -319,11 +316,11 @@ final class user_switching {
 						'switched_off' => 'true',
 					];
 
-					if ( $redirect_to ) {
-						wp_safe_redirect( add_query_arg( $args, $redirect_to ), 302, self::$application );
-					} else {
-						wp_safe_redirect( add_query_arg( $args, home_url() ), 302, self::$application );
+					if ( ! $redirect_to ) {
+						$redirect_to = home_url();
 					}
+
+					wp_safe_redirect( add_query_arg( $args, $redirect_to ), 302, self::$application );
 					exit;
 				} else {
 					/* Translators: "switch off" means to temporarily log out */
@@ -395,7 +392,7 @@ final class user_switching {
 
 		if ( ! empty( $_REQUEST['redirect_to'] ) ) {
 			// URL
-			$redirect_to = self::remove_query_args( wp_unslash( $_REQUEST['redirect_to'] ) );
+			$redirect_to = self::remove_query_args( wp_unslash( (string) $_REQUEST['redirect_to'] ) );
 			$requested_redirect_to = wp_unslash( $_REQUEST['redirect_to'] );
 			$redirect_type = self::REDIRECT_TYPE_URL;
 		} elseif ( ! empty( $_GET['redirect_to_post'] ) ) {
@@ -405,11 +402,8 @@ final class user_switching {
 
 			if ( is_post_publicly_viewable( $post_id ) ) {
 				$link = get_permalink( $post_id );
-
-				if ( is_string( $link ) ) {
-					$redirect_to = $link;
-					$requested_redirect_to = $link;
-				}
+				$redirect_to = $link;
+				$requested_redirect_to = $link;
 			}
 		} elseif ( ! empty( $_GET['redirect_to_term'] ) ) {
 			// Term
@@ -418,11 +412,8 @@ final class user_switching {
 
 			if ( ( $term instanceof WP_Term ) && is_taxonomy_viewable( $term->taxonomy ) ) {
 				$link = get_term_link( $term );
-
-				if ( is_string( $link ) ) {
-					$redirect_to = $link;
-					$requested_redirect_to = $link;
-				}
+				$redirect_to = $link;
+				$requested_redirect_to = $link;
 			}
 		} elseif ( ! empty( $_GET['redirect_to_user'] ) ) {
 			// User
@@ -431,11 +422,8 @@ final class user_switching {
 
 			if ( $user instanceof WP_User ) {
 				$link = get_author_posts_url( $user->ID );
-
-				if ( is_string( $link ) ) {
-					$redirect_to = $link;
-					$requested_redirect_to = $link;
-				}
+				$redirect_to = $link;
+				$requested_redirect_to = $link;
 			}
 		} elseif ( ! empty( $_GET['redirect_to_comment'] ) ) {
 			// Comment
@@ -445,18 +433,12 @@ final class user_switching {
 			if ( $comment instanceof WP_Comment ) {
 				if ( 'approved' === wp_get_comment_status( $comment ) ) {
 					$link = get_comment_link( $comment );
-
-					if ( is_string( $link ) ) {
-						$redirect_to = $link;
-						$requested_redirect_to = $link;
-					}
+					$redirect_to = $link;
+					$requested_redirect_to = $link;
 				} elseif ( is_post_publicly_viewable( (int) $comment->comment_post_ID ) ) {
 					$link = get_permalink( (int) $comment->comment_post_ID );
-
-					if ( is_string( $link ) ) {
-						$redirect_to = $link;
-						$requested_redirect_to = $link;
-					}
+					$redirect_to = $link;
+					$requested_redirect_to = $link;
 				}
 			}
 		}
@@ -489,9 +471,7 @@ final class user_switching {
 		$user = wp_get_current_user();
 		$old_user = self::get_old_user();
 
-		if ( $old_user ) {
-			$switched_locale = false;
-			$lang_attr = '';
+		if ( $old_user instanceof WP_User ) {
 			$locale = get_user_locale( $old_user );
 			$switched_locale = switch_to_locale( $locale );
 			$lang_attr = str_replace( '_', '-', $locale );
@@ -626,7 +606,7 @@ final class user_switching {
 
 		$old_user = self::get_old_user();
 
-		if ( $old_user ) {
+		if ( $old_user instanceof WP_User ) {
 			$wp_admin_bar->add_node( [
 				'parent' => $parent,
 				'id' => 'switch-back',
@@ -681,12 +661,9 @@ final class user_switching {
 
 	/**
 	 * Adds a 'Switch back to {user}' link to access denied messages within the admin area.
-	 *
-	 * Note that this doesn't appear for the "You need a higher level of permission" errors
-	 * because they use a standard `wp_die()` call rather than `admin_page_access_denied`.
 	 */
 	public function action_shutdown_for_wp_die(): void {
-		if ( ! did_action( 'admin_page_access_denied' ) ) {
+		if ( ! did_action( 'admin_page_access_denied' ) && ! ( function_exists( 'did_filter' ) && did_filter( 'wp_die_handler' ) ) ) {
 			return;
 		}
 
@@ -730,22 +707,22 @@ final class user_switching {
 		if ( ! empty( $_GET['post'] ) ) {
 			// Post
 			return [
-				'redirect_to_post' => intval( $_GET['post'] ),
+				'redirect_to_post' => absint( $_GET['post'] ),
 			];
 		} elseif ( ! empty( $_GET['tag_ID'] ) ) {
 			// Term
 			return [
-				'redirect_to_term' => intval( $_GET['tag_ID'] ),
+				'redirect_to_term' => absint( $_GET['tag_ID'] ),
 			];
 		} elseif ( ! empty( $_GET['user_id'] ) ) {
 			// User
 			return [
-				'redirect_to_user' => intval( $_GET['user_id'] ),
+				'redirect_to_user' => absint( $_GET['user_id'] ),
 			];
 		} elseif ( ! empty( $_GET['c'] ) ) {
 			// Comment
 			return [
-				'redirect_to_comment' => intval( $_GET['c'] ),
+				'redirect_to_comment' => absint( $_GET['c'] ),
 			];
 		}
 
@@ -758,16 +735,18 @@ final class user_switching {
 	public function action_wp_meta(): void {
 		$old_user = self::get_old_user();
 
-		if ( $old_user instanceof WP_User ) {
-			$url = add_query_arg( [
-				'redirect_to' => rawurlencode( self::current_url() ),
-			], self::switch_back_url( $old_user ) );
-			printf(
-				'<li id="user_switching_switch_on"><a href="%s">%s</a></li>',
-				esc_url( $url ),
-				esc_html( self::switch_back_message( $old_user ) )
-			);
+		if ( ! ( $old_user instanceof WP_User ) ) {
+			return;
 		}
+
+		$url = add_query_arg( [
+			'redirect_to' => rawurlencode( self::current_url() ),
+		], self::switch_back_url( $old_user ) );
+		printf(
+			'<li id="user_switching_switch_on"><a href="%s">%s</a></li>',
+			esc_url( $url ),
+			esc_html( self::switch_back_message( $old_user ) )
+		);
 	}
 
 	/**
@@ -791,18 +770,21 @@ final class user_switching {
 
 		$old_user = self::get_old_user();
 
-		if ( $old_user instanceof WP_User ) {
-			$url = add_query_arg( [
-				'redirect_to' => rawurlencode( self::current_url() ),
-			], self::switch_back_url( $old_user ) );
-			printf(
-				'<p id="user_switching_switch_on" style="%s"><a href="%s" style="%s">%s</a></p>',
-				'position: fixed; bottom: 40px; padding: 0; margin: 0; left: 10px; font-size: 13px; z-index:99999;',
-				esc_url( $url ),
-				'padding: 8px 10px; background: #fff; color: #3858e9;',
-				esc_html( self::switch_back_message( $old_user ) )
-			);
+		if ( ! ( $old_user instanceof WP_User ) ) {
+			return;
 		}
+
+		$url = add_query_arg( [
+			'redirect_to' => rawurlencode( self::current_url() ),
+		], self::switch_back_url( $old_user ) );
+
+		printf(
+			'<p id="user_switching_switch_on" style="%s"><a href="%s" style="%s">%s</a></p>',
+			'position: fixed; bottom: 40px; padding: 0; margin: 0; left: 10px; font-size: 13px; z-index:99999;',
+			esc_url( $url ),
+			'padding: 8px 10px; background: #fff; color: #3858e9;',
+			esc_html( self::switch_back_message( $old_user ) )
+		);
 	}
 
 	/**
@@ -814,28 +796,30 @@ final class user_switching {
 	public function filter_login_message( string $message ): string {
 		$old_user = self::get_old_user();
 
-		if ( $old_user instanceof WP_User ) {
-			$url = self::switch_back_url( $old_user );
-
-			if ( ! empty( $_REQUEST['interim-login'] ) ) {
-				$url = add_query_arg( [
-					'interim-login' => '1',
-				], $url );
-			} elseif ( ! empty( $_REQUEST['redirect_to'] ) ) {
-				$url = add_query_arg( [
-					'redirect_to' => rawurlencode( wp_unslash( $_REQUEST['redirect_to'] ) ),
-				], $url );
-			}
-
-			$message .= '<p class="message" id="user_switching_switch_on">';
-			$message .= '<span class="dashicons dashicons-admin-users" style="color:#56c234" aria-hidden="true"></span> ';
-			$message .= sprintf(
-				'<a href="%1$s" onclick="window.location.href=\'%1$s\';return false;">%2$s</a>',
-				esc_url( $url ),
-				esc_html( self::switch_back_message( $old_user ) )
-			);
-			$message .= '</p>';
+		if ( ! ( $old_user instanceof WP_User ) ) {
+			return $message;
 		}
+
+		$url = self::switch_back_url( $old_user );
+
+		if ( ! empty( $_REQUEST['interim-login'] ) ) {
+			$url = add_query_arg( [
+				'interim-login' => '1',
+			], $url );
+		} elseif ( ! empty( $_REQUEST['redirect_to'] ) ) {
+			$url = add_query_arg( [
+				'redirect_to' => rawurlencode( wp_unslash( (string) $_REQUEST['redirect_to'] ) ),
+			], $url );
+		}
+
+		$message .= '<p class="message" id="user_switching_switch_on">';
+		$message .= '<span class="dashicons dashicons-admin-users" style="color:#56c234" aria-hidden="true"></span> ';
+		$message .= sprintf(
+			'<a href="%1$s" onclick="window.location.href=\'%1$s\';return false;">%2$s</a>',
+			esc_url( $url ),
+			esc_html( self::switch_back_message( $old_user ) )
+		);
+		$message .= '</p>';
 
 		return $message;
 	}
@@ -961,8 +945,6 @@ final class user_switching {
 	/**
 	 * Filters the list of query arguments which get removed from admin area URLs in WordPress.
 	 *
-	 * @link https://core.trac.wordpress.org/ticket/23367
-	 *
 	 * @param array<int,string> $args Array of removable query arguments.
 	 * @return array<int,string> Updated array of removable query arguments.
 	 */
@@ -983,7 +965,7 @@ final class user_switching {
 	public static function maybe_switch_url( WP_User $user ) {
 		$old_user = self::get_old_user();
 
-		if ( $old_user && ( $old_user->ID === $user->ID ) ) {
+		if ( ( $old_user instanceof WP_User ) && ( $old_user->ID === $user->ID ) ) {
 			return self::switch_back_url( $old_user );
 		} elseif ( current_user_can( 'switch_to_user', $user->ID ) ) {
 			return self::switch_to_url( $user );
@@ -1061,12 +1043,18 @@ final class user_switching {
 	 * @return string The message.
 	 */
 	public static function switch_back_message( WP_User $user ): string {
+		$switched_locale = switch_to_locale( get_user_locale( $user ) );
+
 		$message = sprintf(
 			/* Translators: 1: user display name; 2: username; */
 			__( 'Switch back to %1$s (%2$s)', 'user-switching' ),
 			$user->display_name,
 			$user->user_login
 		);
+
+		if ( $switched_locale ) {
+			restore_previous_locale();
+		}
 
 		// Removes the user login from this message without invalidating existing translations
 		return str_replace( sprintf(
@@ -1102,7 +1090,8 @@ final class user_switching {
 	 * @return string The current URL.
 	 */
 	public static function current_url(): string {
-		return ( is_ssl() ? 'https://' : 'http://' ) . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+		$scheme = is_ssl() ? 'https' : 'http';
+		return "{$scheme}://{$_SERVER['HTTP_HOST']}{$_SERVER['REQUEST_URI']}";
 	}
 
 	/**
@@ -1119,8 +1108,6 @@ final class user_switching {
 	 * Returns whether User Switching's equivalent of the 'logged_in' cookie should be secure.
 	 *
 	 * This is used to set the 'secure' flag on the old user cookie, for enhanced security.
-	 *
-	 * @link https://core.trac.wordpress.org/ticket/15330
 	 *
 	 * @return bool Should the old user cookie be secure?
 	 */
@@ -1179,7 +1166,7 @@ final class user_switching {
 	public function filter_woocommerce_account_menu_items( array $items ): array {
 		$old_user = self::get_old_user();
 
-		if ( ! $old_user ) {
+		if ( ! ( $old_user instanceof WP_User ) ) {
 			return $items;
 		}
 
@@ -1202,7 +1189,7 @@ final class user_switching {
 
 		$old_user = self::get_old_user();
 
-		if ( ! $old_user ) {
+		if ( ! ( $old_user instanceof WP_User ) ) {
 			return $url;
 		}
 
@@ -1466,10 +1453,10 @@ if ( ! function_exists( 'user_switching_get_olduser_cookie' ) ) {
 	 */
 	function user_switching_get_olduser_cookie() {
 		if ( isset( $_COOKIE[ USER_SWITCHING_OLDUSER_COOKIE ] ) ) {
-			return wp_unslash( $_COOKIE[ USER_SWITCHING_OLDUSER_COOKIE ] );
-		} else {
-			return false;
+			return wp_unslash( (string) $_COOKIE[ USER_SWITCHING_OLDUSER_COOKIE ] );
 		}
+
+		return false;
 	}
 }
 
@@ -1477,7 +1464,7 @@ if ( ! function_exists( 'user_switching_get_auth_cookie' ) ) {
 	/**
 	 * Gets the value of the auth cookie containing the list of originating users.
 	 *
-	 * @return array<int,string> Array of originating user authentication cookie values. Empty array if there are none.
+	 * @return list<string> Array of originating user authentication cookie values. Empty array if there are none.
 	 */
 	function user_switching_get_auth_cookie(): array {
 		if ( user_switching::secure_auth_cookie() ) {
@@ -1492,7 +1479,8 @@ if ( ! function_exists( 'user_switching_get_auth_cookie' ) ) {
 		if ( ! isset( $cookie ) || ! is_array( $cookie ) ) {
 			$cookie = [];
 		}
-		return $cookie;
+
+		return array_values( array_filter( $cookie, 'is_string' ) );
 	}
 }
 
